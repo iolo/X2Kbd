@@ -10,10 +10,10 @@
 #define ps2dev_h
 
 #ifndef PS2_CLOCK_PIN
-#define PS2_CLOCK_PIN 3
+#define PS2_CLOCK_PIN PIN_A0
 #endif
 #ifndef PS2_DATA_PIN
-#define PS2_DATA_PIN 2
+#define PS2_DATA_PIN PIN_A1
 #endif
 
 #include "Arduino.h"
