@@ -29,68 +29,88 @@ enum Translate_Code {
 #define MOD_SHIFT_VAL   0x4000
 #define MS              MOD_SHIFT_VAL + 
 
+// some PS2 scancode has special key prefix(0xe0) as hi-byte (b15..b8 = 0xe0)
+// custom translation flag is overlapped on lo-nibble of the hi-byte of scan code (b11..b8)
+//
+//  1 1 1 0 0 0 0 0    0 0 0 0 0 0 0 0
+// +-+-+-+-+-+-+-+-+  +-+-+-+-+-+-+-+-+ 
+// ps2 special key prefix   ps2 scan code
+//         +-+-+-+-+
+//     custom translation flag(overlapped!)
+//          |  |  |  |  |
+//          +--+--+  | no shift
+//             |   shift
+//          reserved
+//  
+#define _CUSTOM_TRANSLATION_MASK 0x0f00
+#define _NOSHIFT_MASK 0x0100
+#define _SHIFT_MASK 0x0200
+#define _NOSHIFT(x) ((x)|_NOSHIFT_MASK)
+#define _SHIFT(x) ((x)|_SHIFT_MASK)
 // mapping table from msx keyboard matrix to ps/2 scan code.
 // https://www.msx.org/wiki/Keyboard_Matrices#Korean_matrix_for_Daewoo_CPC-300.2C_CPC-300E.2C_CPC-400_and_CPC-400S
 // NOTE: see with horizontal flip!
 // ps/2 keyboard send same scan code whether caps lock is on or not.
 // bypass press and release if possible!
-// TODO: Emulate PS/2 only keys
-// ex. MSX didn't have F5. How to press F5? SHIFT+F1? Then, how to press SHIFT+F5? So, we need "FN" key! When FN+F1..5 on MSX will be F5..10 on PC.
-static int msx_keyboard_matrix[sizeX][sizeY] = {
-  // 0               1!                       2"                3#              4$              5%              6&                      7'
-  { PS2_0,           PS2_1,                   PS2_2,            PS2_3,          PS2_4,          PS2_5,          PS2_6,                  PS2_7           },
-  // 8(              9)                       -=                ^~              \|              @'              [{                      ;+
-  { PS2_8,           PS2_9,                   PS2_MINUS,        0,              PS2_BACKSLASH,  0,              PS2_LEFT_ANGLE_BRACKET, PS2_SEMICOLON   },
-  // :*              ]}                       ,<                .<              /?              N/A             aA                      bB
-  { 0,               PS2_RIGHT_ANGLE_BRACKET, PS2_COMMA,        PS2_PERIOD,     PS2_SLASH,      0,              PS2_A,                  PS2_B           },
-  // cC              dD                       eE                fF              gG              hH              iI                      jJ
-  { PS2_C,           PS2_D,                   PS2_E,            PS2_F,          PS2_G,          PS2_H,          PS2_I,                  PS2_J           },
-  // kK              lL                       mM                nN              oO              pP              qQ                      rR
-  { PS2_K,           PS2_L,                   PS2_M,            PS2_N,          PS2_O,          PS2_P,          PS2_Q,                  PS2_R           },
-  // sS              tT                       uU                vV              wW              xX              yY                      zZ
-  { PS2_S,           PS2_T,                   PS2_U,            PS2_V,          PS2_W,          PS2_X,          PS2_Y,                  PS2_Z           },
-  // shift?          Ctrl                     Graph             Caps            Korean          F1              F2                      F3
-  { 0,               PS2_LEFT_CTRL,           PS2_LEFT_ALT,     PS2_CAPS_LOCK,  PS2_RIGHT_ALT,  PS2_F1,         PS2_F2,                 PS2_F3          },
-  // F4              F5                       Esc               Tab             Stop            Backspace       Select                  Return
-  { PS2_F4,          PS2_F5,                  PS2_ESC,          PS2_TAB,        PS2_F11,        PS2_BACKSPACE,  PS2_F12,                PS2_ENTER       },
-  // Space           Home                     Ins               Sup             Left            Up              Down                    Right
-  { PS2_SPACE,       PS2_HOME,                PS2_INSERT,       PS2_DELETE,     PS2_LEFT_ARROW, PS2_UP_ARROW,   PS2_DOWN_ARROW,         PS2_RIGHT_ARROW },
-  // *               +                        /                 0               1               2               3                       4
-  { PS2_KP_ASTERISK, PS2_KP_PLUS,             PS2_KP_SLASH,     PS2_KP_0,       PS2_KP_1,       PS2_KP_2,       PS2_KP_3,               PS2_KP_4        },
-  // 5               6                        7                 8               9               -               ,                       .
-  { PS2_KP_5,        PS2_KP_6,                PS2_KP_7,         PS2_KP_8,       PS2_KP_9,       PS2_KP_MINUS,   PS2_COMMA,              PS2_PERIOD      }
-};
-
-#if 0
-static int trans [TRANS_MAX] [sizeX] [sizeY] = {
-  {   // normal
-    { '0', '1', '2', '3', '4', '5', '6', '7' },
-    { '8', '9', '-', '^', '\\', '@', '[', ';' },
-    { ':', ']', ',', '.', '/',   0, 'a', 'b' },
-    { 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j' },
-    { 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r' },
-    { 's', 't', 'u', 'v', 'w', 'x', 'y', 'z' },
-    { 0,          KEY_LEFT_CTRL,    KEY_LEFT_ALT, KEY_CAPS_LOCK,  KEY_RIGHT_ALT,  KEY_F1,         KEY_F2,         KEY_F3 },
-    { KEY_F4,     KEY_F5,           KEY_ESC,      KEY_TAB,        KEY_F11,        KEY_BACKSPACE,  KEY_F12,        KEY_RETURN },
-    { ' ',        KEY_HOME,         KEY_END,      KEY_DELETE,     KEY_LEFT_ARROW, KEY_UP_ARROW,   KEY_DOWN_ARROW, KEY_RIGHT_ARROW },
-    { KEY_SCRLK,  KEY_RIGHT_CTRL,   KEY_PRTSCR,   KEY_INSERT,     KEY_END,        KEY_DOWN_ARROW, KEY_PAGE_DOWN,  KEY_LEFT_ARROW },
-    { 0,          KEY_RIGHT_ARROW,  KEY_HOME,     KEY_UP_ARROW,   KEY_PAGE_UP,    KEY_PAUSE,      KEY_RIGHT_ALT,  KEY_DELETE }
+// TODO: MSX combination keys into PS2 multiple scan codes
+// ...
+static int msx_keyboard_matrix[TRANS_MAX][sizeX][sizeY] = {
+  // Translate MSX <X> -> PS2 <Y> or Shift+<Y>
+  // ex. MSX A..Z,0..9,F1..F5 -> PS2 A-Z,0..9,F1..F5
+  // ex. MSX ^ -> PS2 Shift+6
+  {
+    // 0               1!                       2"                3#              4$              5%              6&                      7'
+    { PS2_0,           PS2_1,                   PS2_2,            PS2_3,          PS2_4,          PS2_5,          PS2_6,                  PS2_7           },
+    // 8(              9)                       -=                ^~              \|              @`              [{                      ;+
+    { PS2_8,           PS2_9,                   PS2_MINUS,        _SHIFT(PS2_6),  PS2_BACKSLASH,  _SHIFT(PS2_2),  PS2_LEFT_ANGLE_BRACKET, PS2_SEMICOLON   },
+    // :*              ]}                       ,<                .<              /?              N/A             aA                      bB
+    { _SHIFT(PS2_SEMICOLON), PS2_RIGHT_ANGLE_BRACKET, PS2_COMMA,  PS2_PERIOD,     PS2_SLASH,      0,              PS2_A,                  PS2_B           },
+    // cC              dD                       eE                fF              gG              hH              iI                      jJ
+    { PS2_C,           PS2_D,                   PS2_E,            PS2_F,          PS2_G,          PS2_H,          PS2_I,                  PS2_J           },
+    // kK              lL                       mM                nN              oO              pP              qQ                      rR
+    { PS2_K,           PS2_L,                   PS2_M,            PS2_N,          PS2_O,          PS2_P,          PS2_Q,                  PS2_R           },
+    // sS              tT                       uU                vV              wW              xX              yY                      zZ
+    { PS2_S,           PS2_T,                   PS2_U,            PS2_V,          PS2_W,          PS2_X,          PS2_Y,                  PS2_Z           },
+    // Shift           Ctrl                     Graph             Caps            Korean          F1              F2                      F3
+    { PS2_LEFT_SHIFT,  PS2_LEFT_CTRL,           PS2_LEFT_ALT,     PS2_CAPS_LOCK,  PS2_RIGHT_ALT,  PS2_F1,         PS2_F2,                 PS2_F3          },
+    // F4              F5                       Esc               Tab             Stop            Backspace       Select                  Return
+    { PS2_F4,          PS2_F5,                  PS2_ESC,          PS2_TAB,        PS2_F11,        PS2_BACKSPACE,  PS2_F12,                PS2_ENTER       },
+    // Space           Home                     Ins               Sup             Left            Up              Down                    Right
+    { PS2_SPACE,       PS2_HOME,                PS2_INSERT,       PS2_DELETE,     PS2_LEFT_ARROW, PS2_UP_ARROW,   PS2_DOWN_ARROW,         PS2_RIGHT_ARROW },
+    // *               +                        /                 0               1               2               3                       4
+    { PS2_KP_ASTERISK, PS2_KP_PLUS,             PS2_KP_SLASH,     PS2_KP_0,       PS2_KP_1,       PS2_KP_2,       PS2_KP_3,               PS2_KP_4        },
+    // 5               6                        7                 8               9               -               ,                       .
+    { PS2_KP_5,        PS2_KP_6,                PS2_KP_7,         PS2_KP_8,       PS2_KP_9,       PS2_KP_MINUS,   PS2_COMMA,              PS2_PERIOD      }
   },
-  {   // shifted
-    {   0, '!', '\"', '#', '$', '%', '&', '\'' },
-    { '(', ')', '=', '~', '|', '`', '{', '+' },
-    { '*', '}', '<', '>', '?', '_', 'A', 'B' },
-    { 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J' },
-    { 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R' },
-    { 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z' },
-    { 0,          KEY_LEFT_CTRL,    KEY_LEFT_ALT, KEY_CAPS_LOCK,  KEY_RIGHT_ALT,      KEY_F5,           KEY_F7,             KEY_F8 },
-    { KEY_F9,     KEY_F10,          KEY_ESC,      KEY_TAB,        KEY_F11,            KEY_BACKSPACE,    KEY_F12,            KEY_RETURN },
-    { ' ',        MS KEY_HOME,          MS KEY_END,   KEY_DELETE,       MS KEY_LEFT_ARROW,  MS KEY_UP_ARROW,    MS KEY_DOWN_ARROW,  MS KEY_RIGHT_ARROW },
-    { KEY_SCRLK,  KEY_RIGHT_CTRL,       KEY_PRTSCR,   KEY_INSERT,       MS KEY_END,         MS KEY_DOWN_ARROW,  MS KEY_PAGE_DOWN,   MS KEY_LEFT_ARROW },
-    { 0,          MS KEY_RIGHT_ARROW,   MS KEY_HOME,  MS KEY_UP_ARROW,  MS KEY_PAGE_UP,     KEY_PAUSE,          KEY_RIGHT_ALT,      KEY_DELETE }
+  // Translate MSX Shift+X -> PS2 Y or Shift+Y
+  // ex. MSX Shift+F1..F5 -> PS2 F6..F10  (TODO: how to PS2 Shift+F6..F10?)
+  // ex. MAX Shift+7(') -> PS2 '
+  // ex. MSX Shift+6(&) -> PS2 Shift+7
+  {
+    // 0               1!                       2"                3#              4$              5%              6&                      7'
+    { PS2_0,           PS2_1,                   _SHIFT(PS2_QUOTE),PS2_3,          PS2_4,          PS2_5,          _SHIFT(PS2_7),          _NOSHIFT(PS2_QUOTE)},
+    // 8(              9)                       -=                ^~              \|              @`              [{                      ;+
+    { _SHIFT(PS2_9), _SHIFT(PS2_0), _NOSHIFT(PS2_EQUAL), _SHIFT(PS2_BACKTICK), PS2_BACKSLASH, _NOSHIFT(PS2_BACKTICK), PS2_LEFT_ANGLE_BRACKET, PS2_EQUAL       },
+    // :*              ]}                       ,<                .<              /?              N/A             aA                      bB
+    { _SHIFT(PS2_8),   PS2_RIGHT_ANGLE_BRACKET, PS2_COMMA,        PS2_PERIOD,     PS2_SLASH,      0,              PS2_A,                  PS2_B           },
+    // cC              dD                       eE                fF              gG              hH              iI                      jJ
+    { PS2_C,           PS2_D,                   PS2_E,            PS2_F,          PS2_G,          PS2_H,          PS2_I,                  PS2_J           },
+    // kK              lL                       mM                nN              oO              pP              qQ                      rR
+    { PS2_K,           PS2_L,                   PS2_M,            PS2_N,          PS2_O,          PS2_P,          PS2_Q,                  PS2_R           },
+    // sS              tT                       uU                vV              wW              xX              yY                      zZ
+    { PS2_S,           PS2_T,                   PS2_U,            PS2_V,          PS2_W,          PS2_X,          PS2_Y,                  PS2_Z           },
+    // Shift           Ctrl                     Graph             Caps            Korean          F1              F2                      F3
+    { PS2_LEFT_SHIFT,  PS2_LEFT_CTRL,           PS2_LEFT_ALT,     PS2_CAPS_LOCK,  PS2_RIGHT_ALT,  _NOSHIFT(PS2_F6), _NOSHIFT(PS2_F7),     _NOSHIFT(PS2_F8)},
+    // F4              F5                       Esc               Tab             Stop            Backspace       Select                  Return
+    { _NOSHIFT(PS2_F9), _NOSHIFT(PS2_F10),      PS2_ESC,          PS2_TAB,        PS2_F11,        PS2_BACKSPACE,  PS2_F12,                PS2_ENTER       },
+    // Space           Home                     Ins               Sup             Left            Up              Down                    Right
+    { PS2_SPACE,       PS2_HOME,                PS2_INSERT,       PS2_DELETE,     PS2_LEFT_ARROW, PS2_UP_ARROW,   PS2_DOWN_ARROW,         PS2_RIGHT_ARROW },
+    // *               +                        /                 0               1               2               3                       4
+    { PS2_KP_ASTERISK, PS2_KP_PLUS,             PS2_KP_SLASH,     PS2_KP_0,       PS2_KP_1,       PS2_KP_2,       PS2_KP_3,               PS2_KP_4        },
+    // 5               6                        7                 8               9               -               ,                       .
+    { PS2_KP_5,        PS2_KP_6,                PS2_KP_7,         PS2_KP_8,       PS2_KP_9,       PS2_KP_MINUS,   PS2_COMMA,              PS2_PERIOD      }
   }
 };
-#endif
 
 int shiftX = 6;
 int shiftY_ = 0x80;
@@ -142,23 +162,19 @@ bool CTranslate::IsPressed( int x, int y_ )
 
 void CTranslate::process()
 {
-#if 0
     int shifted = IsPressed( shiftX, shiftY_ ) ? TRANS_SHIFT : TRANS_NORMAL;
     if( shifted != m_oldShifted )
     {
-        if( shifted )
-        {
-            DBGLN("On");
-            //CPCKeyboard::GetInstance()->presskey( KEY_LEFT_SHIFT );
-        }
-        else 
-        {
-            DBGLN("Off");
-            //CPCKeyboard::GetInstance()->releasekey( KEY_LEFT_SHIFT );
+        if (shifted) {
+          DBG(">ps2: press shift:");DBGHEXLN(PS2_LEFT_SHIFT);
+          PS2dev::GetInstance()->keyboard_press(PS2_LEFT_SHIFT);
+        } else {
+          DBG(">ps2: release shift:");DBGHEXLN(PS2_LEFT_SHIFT);
+          PS2dev::GetInstance()->keyboard_release(PS2_LEFT_SHIFT);
         }
         m_oldShifted = shifted;
+        return;
     }
-#endif
     for( int x = 0; x < sizeX; x ++ )
     {
         int val = CX2Keyboard::GetInstance()->Get( x ); // 0..10
@@ -171,58 +187,83 @@ void CTranslate::process()
             int last = ( lastVal [x] & b ) > 0 ? 1 : 0;
             int curr = ( val & b ) > 0 ? 1 : 0;
             b >>= 1;
-            
-            int key = msx_keyboard_matrix[x][y];
-            DBG("<x2: row=");DBG(x);DBG("bit=");DBG(x);DBG("->key=");DBGHEXLN(key);
-#if 0
-            int key = trans [shifted] [x] [y];
-#endif
-            if( key == 0 )
-                continue;
-
-            if( last == 1 && curr == 0 ) {
-              if (key & PS2_PREFIX_SPECIAL) {
-                DBG("*release special:");DBGHEXLN(key & 0xff);
-                PS2dev::GetInstance()->keyboard_release_special(key & 0xff); // use lower byte
-              } else {
-                DBG("*release:");DBGHEXLN(key);
-                PS2dev::GetInstance()->keyboard_release(key);
-              }
+            if (last == curr) {
+              continue;
             }
-            else if( last == 0 && curr == 1 ) {
-              if (key & PS2_PREFIX_SPECIAL) {
-                DBG("*press special:");DBGHEXLN(key & 0xff);
-                PS2dev::GetInstance()->keyboard_press_special(key & 0xff); // use lower byte
+
+            int key = msx_keyboard_matrix[shifted][x][y];
+            if (key == 0 || key == PS2_LEFT_SHIFT || key == PS2_RIGHT_SHIFT) {
+              continue;
+            }
+            DBG("<x2: shift=");DBG(shifted);DBG("x=");DBG(x);DBG("y=");DBG(y);DBG(curr ? "press" : "release");DBG("-> key=");DBGHEXLN(key);
+
+            int custom_translation_mask = key & _CUSTOM_TRANSLATION_MASK;
+            if (custom_translation_mask) {
+              // erase custom_translation_mask
+              key &= ~_CUSTOM_TRANSLATION_MASK;
+            }
+
+            bool is_ps2_special_key = false;              
+            if ((key & 0xff00) == 0xe000) {
+              is_ps2_special_key = true;
+              // erase special key prefix(0xe0)
+              // and use low byte
+              key &= 0xff;
+            }
+
+            if( last == 0 && curr == 1 )
+            {
+              if (custom_translation_mask) {
+                if (shifted && custom_translation_mask == _NOSHIFT_MASK) {
+                  DBGLN(">ps2: *fake* release shift");
+                  PS2dev::GetInstance()->keyboard_release(PS2_LEFT_SHIFT);
+                  m_oldShifted = false;
+                }
+                if (!shifted && custom_translation_mask == _SHIFT_MASK) {
+                  DBGLN(">ps2: *fake* press shift");
+                  PS2dev::GetInstance()->keyboard_press(PS2_LEFT_SHIFT);
+                  m_oldShifted = true;
+                }
+                m_fakeKey = key;//msx_keyboard_matrix[TRANS_NORMAL][x][y];
+              }
+
+              CheckToggleCAPS( x, y );
+              CheckToggleHANGUL( x, y );
+
+              if (is_ps2_special_key) {
+                DBG(">ps2: press special:");DBGHEXLN(key);
+                PS2dev::GetInstance()->keyboard_press_special(key);
               } else {
-                DBG("*press:");DBGHEXLN(key);
+                DBG(">ps2: press:");DBGHEXLN(key);
                 PS2dev::GetInstance()->keyboard_press(key);
               }
             }
-
-#if 0
-            if( shifted && (last!=curr) && ( key & MOD_SHIFT_VAL ) == 0 )
+            else if( last == 1 && curr == 0 )
             {
-                //DBGLN("On2 " + String(x) + "," + String(y) + "," + String(key,HEX) );
-                //CPCKeyboard::GetInstance()->releasekey( KEY_LEFT_SHIFT );
+              // send release the key was sent to ps2 instead of msx key
+              if (m_fakeKey) {
+                DBG("* release fake key instead of ");DBGHEXLN(key);
+                key = m_fakeKey;
+                m_fakeKey = 0;
+              }
+              if (is_ps2_special_key) {
+                DBG(">ps2: release special:");DBGHEXLN(key);
+                PS2dev::GetInstance()->keyboard_release_special(key);
+              } else {
+                DBG(">ps2: release:");DBGHEXLN(key);
+                PS2dev::GetInstance()->keyboard_release(key);
+              }
+              // if (m_fakeShift != shifted) {
+              //   if (shifted) {
+              //     DBGLN(">ps2: *unfake* press shift");
+              //     PS2dev::GetInstance()->keyboard_press(PS2_LEFT_SHIFT);
+              //   } else {
+              //     DBGLN(">ps2: *unfake* release shift");
+              //     PS2dev::GetInstance()->keyboard_release(PS2_LEFT_SHIFT);
+              //   }
+              //   m_fakeShift = shifted;
+              // }
             }
-            
-            if( last == 1 && curr == 0 )
-            {
-                //CPCKeyboard::GetInstance()->releasekey( key );
-            }
-            else if( last == 0 && curr == 1 )
-            {
-                CheckToggleCAPS( x, y );
-                CheckToggleHANGUL( x, y );
-                //CPCKeyboard::GetInstance()->presskey( key );
-            }
-
-            if( shifted && (last!=curr) && ( key & MOD_SHIFT_VAL ) == 0 )
-            {
-                //DBGLN("Off2 " + String(x) + "," + String(y) + "," + String(key,HEX) );
-                //CPCKeyboard::GetInstance()->presskey( KEY_LEFT_SHIFT );
-            }
-#endif
         }
         
         lastVal [x] = val;
