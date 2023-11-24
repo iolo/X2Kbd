@@ -22,4 +22,6 @@ protected:
     bool    m_isCAPS;
     bool    m_isHANGUL;
     bool    m_oldShifted;
+    bool m_fakeShift;
+    int m_fakeKey;
 };
