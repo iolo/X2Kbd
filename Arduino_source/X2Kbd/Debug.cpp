@@ -5,7 +5,7 @@
  */
 
 #include <Arduino.h>
-#include <String.h>
+#include <WString.h>
 
 #include "Common.h"
 #include "Debug.h"
